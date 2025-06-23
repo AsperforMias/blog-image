@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  blog-image:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./image:/root/image
+    environment:
+      - port=8000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
