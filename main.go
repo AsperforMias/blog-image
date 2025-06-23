@@ -51,7 +51,35 @@ func PCRandomImageHendler(w http.ResponseWriter, r *http.Request) {
 	//随机选点图片
 	rand.Seed(time.Now().UnixNano())
 	file := files[rand.Intn(len(files))].Name()
-	imagePath := filepath.Join("image", file)
+	imagePath := filepath.Join("image/pc", file)
+
+	switch filepath.Ext(file) {
+	case ".jpg", ".jpeg":
+		w.Header().Set("Content-Type", "image/jpeg")
+	case ".png":
+		w.Header().Set("Content-Type", "image/png")
+	case ".webp":
+		w.Header().Set("Content-Type", "image/webp")
+	default:
+		http.Error(w, "image type is not support", 415)
+		return
+	}
+
+	http.ServeFile(w, r, imagePath)
+}
+
+// 移动端随机图片
+func MobileRandomImageHendler(w http.ResponseWriter, r *http.Request) {
+	files, err := ioutil.ReadDir("image/mobile")
+	if err != nil || len(files) == 0 {
+		http.Error(w, "images not found", 500)
+		return
+	}
+
+	//随机选点图片
+	rand.Seed(time.Now().UnixNano())
+	file := files[rand.Intn(len(files))].Name()
+	imagePath := filepath.Join("image/mobile", file)
 
 	switch filepath.Ext(file) {
 	case ".jpg", ".jpeg":
@@ -79,6 +107,7 @@ func main() {
 	http.HandleFunc("/ciallo", cialloHandler)
 	http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/pc", PCRandomImageHendler)
+	http.HandleFunc("/mobile", MobileRandomImageHendler)
 
 	// 启动服务
 	log.Printf("Service is on port %s", *port)
