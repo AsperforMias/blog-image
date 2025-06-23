@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 	"time"
 )
@@ -19,6 +20,12 @@ func getEnvString(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// 判断是否为手机端(用于后文是手机端返回手机端图片)
+func isMobile(userAgent string) bool {
+	ua := strings.ToLower(userAgent)
+	return strings.Contains(ua, "mobile") || strings.Contains(ua, "android") || strings.Contains(ua, "iphone")
 }
 
 // 加载html页面
@@ -96,6 +103,15 @@ func MobileRandomImageHendler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, imagePath)
 }
 
+func AutoRandomImageHendler(w http.ResponseWriter, r *http.Request) {
+	ua := r.UserAgent()
+	if isMobile(ua) {
+		http.Redirect(w, r, "/mobile", 302)
+	} else {
+		http.Redirect(w, r, "/pc", 302)
+	}
+}
+
 func main() {
 	// 设置启动参数
 	var (
@@ -108,6 +124,7 @@ func main() {
 	http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/pc", PCRandomImageHendler)
 	http.HandleFunc("/mobile", MobileRandomImageHendler)
+	http.HandleFunc("/auto", AutoRandomImageHendler)
 
 	// 启动服务
 	log.Printf("Service is on port %s", *port)
