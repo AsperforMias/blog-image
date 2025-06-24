@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [linux, windows, darwin]
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "stable"
+
+      - name: Build Binary
+        run: |
+          export GOOS=${{ matrix.os }}
+          export GOARCH=${{ matrix.arch }}
+          BINARY_NAME="blog-image-${GOOS}-${GOARCH}"
+          [[ "$GOOS" == "windows" ]] && BINARY_NAME+=".exe"
+          go build -v -ldflags="-s -w" -o $BINARY_NAME
+
+      - name: Package Binary
+        run: |
+          BINARY_NAME="blog-image-${{ matrix.os }}-${{ matrix.arch }}"
+          [[ "${{ matrix.os }}" == "windows" ]] && BINARY_NAME+=".exe"
+          tar -czvf "${BINARY_NAME}.tar.gz" "$BINARY_NAME"
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: blog-image-${{ matrix.os }}-${{ matrix.arch }}
+          path: "*.tar.gz"
+
+  create-release:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Prepare Release Files
+        run: |
+          find ./artifacts -name "*.tar.gz" -exec cp {} . \;
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: "*.tar.gz"
+          generate_release_notes: true
+        env:
+          TOKEN: ${{ secrets.TOKEN }}
