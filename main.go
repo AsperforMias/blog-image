@@ -14,7 +14,14 @@ import (
 	"time"
 )
 
-// 获取env的内容(为适配Docker而做准备)
+var allowedExtensions = map[string]string{
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".png":  "image/png",
+	".webp": "image/webp",
+}
+
+// 获取env(适用于Docker)
 func getEnvString(key, defaultValue string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
@@ -22,111 +29,107 @@ func getEnvString(key, defaultValue string) string {
 	return defaultValue
 }
 
-// 判断是否为手机端(用于后文是手机端返回手机端图片)
+// 判断是否为移动设备
 func isMobile(userAgent string) bool {
 	ua := strings.ToLower(userAgent)
-	return strings.Contains(ua, "mobile") || strings.Contains(ua, "android") || strings.Contains(ua, "iphone")
+	return strings.Contains(ua, "mobile") ||
+		strings.Contains(ua, "android") ||
+		strings.Contains(ua, "iphone") ||
+		strings.Contains(ua, "ipad") ||
+		strings.Contains(ua, "ipod") ||
+		strings.Contains(ua, "windows phone")
 }
 
-// 加载html页面
+// 读取HTML页面
 func renderTemplate(w http.ResponseWriter, tmpl string) {
 	t, err := template.ParseFiles("static/" + tmpl + ".html")
 	if err != nil {
-		http.Error(w, "html load failed", 500)
+		http.Error(w, "html load failed", http.StatusInternalServerError)
+		log.Println("Template load failed:", err)
 		return
 	}
-	t.Execute(w, nil)
+	if err := t.Execute(w, nil); err != nil {
+		http.Error(w, "template execution failed", http.StatusInternalServerError)
+		log.Println("Template exec failed:", err)
+	}
 }
 
-// 一些页面
+// Ciallo～(∠・ω< )⌒☆
 func cialloHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "Ciallo～(∠・ω< )⌒☆")
 }
 
+// 主页
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	renderTemplate(w, "index")
 }
 
-// PC端随机图片
-func PCRandomImageHendler(w http.ResponseWriter, r *http.Request) {
-	files, err := ioutil.ReadDir("image/pc")
+// 随机选取图片
+func randomImageHandler(w http.ResponseWriter, r *http.Request, dir string) {
+	files, err := ioutil.ReadDir(dir)
 	if err != nil || len(files) == 0 {
-		http.Error(w, "images not found", 500)
+		http.Error(w, "images not found", http.StatusInternalServerError)
+		log.Println("No images in", dir, ":", err)
 		return
 	}
 
-	//随机选点图片
-	rand.Seed(time.Now().UnixNano())
-	file := files[rand.Intn(len(files))].Name()
-	imagePath := filepath.Join("image/pc", file)
+	var imageFiles []string
+	for _, file := range files {
+		ext := strings.ToLower(filepath.Ext(file.Name()))
+		if _, ok := allowedExtensions[ext]; ok {
+			imageFiles = append(imageFiles, file.Name())
+		}
+	}
 
-	switch filepath.Ext(file) {
-	case ".jpg", ".jpeg":
-		w.Header().Set("Content-Type", "image/jpeg")
-	case ".png":
-		w.Header().Set("Content-Type", "image/png")
-	case ".webp":
-		w.Header().Set("Content-Type", "image/webp")
-	default:
-		http.Error(w, "image type is not support", 415)
+	if len(imageFiles) == 0 {
+		http.Error(w, "no valid images found", http.StatusInternalServerError)
+		log.Println("No valid images in", dir)
 		return
 	}
 
+	file := imageFiles[rand.Intn(len(imageFiles))]
+	imagePath := filepath.Join(dir, file)
+	contentType := allowedExtensions[strings.ToLower(filepath.Ext(file))]
+
+	// 缓存这种事情补药啊
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
+	w.Header().Set("Content-Type", contentType)
 	http.ServeFile(w, r, imagePath)
 }
 
-// 移动端随机图片
-func MobileRandomImageHendler(w http.ResponseWriter, r *http.Request) {
-	files, err := ioutil.ReadDir("image/mobile")
-	if err != nil || len(files) == 0 {
-		http.Error(w, "images not found", 500)
-		return
-	}
-
-	//随机选点图片
-	rand.Seed(time.Now().UnixNano())
-	file := files[rand.Intn(len(files))].Name()
-	imagePath := filepath.Join("image/mobile", file)
-
-	switch filepath.Ext(file) {
-	case ".jpg", ".jpeg":
-		w.Header().Set("Content-Type", "image/jpeg")
-	case ".png":
-		w.Header().Set("Content-Type", "image/png")
-	case ".webp":
-		w.Header().Set("Content-Type", "image/webp")
-	default:
-		http.Error(w, "image type is not support", 415)
-		return
-	}
-
-	http.ServeFile(w, r, imagePath)
+// PC端图片
+func PCRandomImageHandler(w http.ResponseWriter, r *http.Request) {
+	randomImageHandler(w, r, "image/pc")
 }
 
-func AutoRandomImageHendler(w http.ResponseWriter, r *http.Request) {
+// 移动端图片
+func MobileRandomImageHandler(w http.ResponseWriter, r *http.Request) {
+	randomImageHandler(w, r, "image/mobile")
+}
+
+// 双端自动适配
+func AutoRandomImageHandler(w http.ResponseWriter, r *http.Request) {
 	ua := r.UserAgent()
 	if isMobile(ua) {
-		http.Redirect(w, r, "/mobile", 302)
+		http.Redirect(w, r, "/mobile", http.StatusFound)
 	} else {
-		http.Redirect(w, r, "/pc", 302)
+		http.Redirect(w, r, "/pc", http.StatusFound)
 	}
 }
 
 func main() {
-	// 设置启动参数
-	var (
-		port = flag.String("port", getEnvString("port", "8000"), "Service Port")
-	)
+	rand.Seed(time.Now().UnixNano())
+	port := flag.String("port", getEnvString("port", "8000"), "Service Port")
 	flag.Parse()
 
-	// 定义页面
 	http.HandleFunc("/ciallo", cialloHandler)
 	http.HandleFunc("/", indexHandler)
-	http.HandleFunc("/pc", PCRandomImageHendler)
-	http.HandleFunc("/mobile", MobileRandomImageHendler)
-	http.HandleFunc("/auto", AutoRandomImageHendler)
+	http.HandleFunc("/pc", PCRandomImageHandler)
+	http.HandleFunc("/mobile", MobileRandomImageHandler)
+	http.HandleFunc("/auto", AutoRandomImageHandler)
 
-	// 启动服务
 	log.Printf("Service is on port %s", *port)
 	err := http.ListenAndServe(":"+*port, nil)
 	if err != nil {
