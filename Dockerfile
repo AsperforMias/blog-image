@@ -10,6 +10,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o blog-image .
 FROM scratch
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /app/blog-image /app/blog-image
+COPY --from=builder /app/blog-image /blog-image
 
-ENTRYPOINT ["/app/blog-image"]
+ENTRYPOINT ["/blog-image"]
