@@ -59,11 +59,6 @@ func cialloHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "Ciallo～(∠・ω< )⌒☆")
 }
 
-// 主页
-func indexHandler(w http.ResponseWriter, r *http.Request) {
-	renderTemplate(w, "index")
-}
-
 // 随机选取图片
 func randomImageHandler(w http.ResponseWriter, r *http.Request, dir string) {
 	files, err := ioutil.ReadDir(dir)
@@ -124,8 +119,7 @@ func main() {
 	port := flag.String("port", getEnvString("port", "8000"), "Service Port")
 	flag.Parse()
 
-	http.HandleFunc("/ciallo", cialloHandler)
-	http.HandleFunc("/", indexHandler)
+	http.HandleFunc("/", cialloHandler)
 	http.HandleFunc("/pc", PCRandomImageHandler)
 	http.HandleFunc("/mobile", MobileRandomImageHandler)
 	http.HandleFunc("/auto", AutoRandomImageHandler)
